@@ -3,6 +3,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 
 import javax.swing.SwingUtilities;
@@ -18,6 +19,8 @@ import java.util.ArrayList;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerSimulator {
@@ -27,12 +30,31 @@ public class ServerSimulator {
     private int fps = 0;
     private long lastUpdateTime;
     private Sprite sprite;
+    private ServerSocket serverSocket;
+    private SimulatorState simulationState;
+    private ScheduledExecutorService executorService;
+    private DrawPanel drawPanel;
     public ServerSimulator(int port) {
         pool = new ForkJoinPool();
         
         this.port = port;
+        this.simulationState = new SimulatorState();
+        this.executorService = Executors.newScheduledThreadPool(1);
     }
+    public void start() throws IOException {
+        serverSocket = new ServerSocket(port);
+        System.out.println("Server started on port " + port);
+        
+        // Schedule simulation state updates
+        executorService.scheduleAtFixedRate(() -> {
+            simulationState.update(0.016); // Assuming 60 updates per second
+        }, 0, 16, TimeUnit.MILLISECONDS);
 
+        while (!serverSocket.isClosed()) {
+            Socket clientSocket = serverSocket.accept();
+            new Thread(new ClientHandler(clientSocket, simulationState)).start();
+        }
+    }
     public void startServer() {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Server started on port " + port);
@@ -42,7 +64,7 @@ public class ServerSimulator {
                 System.out.println("Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
                 // Handle client in a separate thread
-                new ClientHandler(clientSocket).start();
+                new ClientHandler(clientSocket, simulationState).start();
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -81,7 +103,7 @@ public class ServerSimulator {
     private static class ClientHandler extends Thread {
         private Socket clientSocket;
 
-        public ClientHandler(Socket socket) {
+        public ClientHandler(Socket socket, SimulatorState simulationState) {
             this.clientSocket = socket;
         }
 

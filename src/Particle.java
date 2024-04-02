@@ -51,12 +51,12 @@ class Particle {
     public double getY(){
         return y;
     }
-    public void checkCollisionWithBounds(DrawPanel drawPanel) {
-        if (x < 0 || x > drawPanel.getWidth()) {
+    public void checkCollisionWithBounds(int width, int height) {
+        if (x < 0 || x > width) {
             angle = Math.PI - angle;
         }
 
-        if (y < 0 || y > drawPanel.getHeight()) {
+        if (y < 0 || y > height) {
             angle = -angle;
         }
     }

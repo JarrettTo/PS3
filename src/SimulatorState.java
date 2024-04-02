@@ -7,13 +7,15 @@ import java.awt.geom.Point2D;
 public class SimulatorState {
     private final List<Particle> particles;
     private final List<Wall> walls;
+    private final int simulationWidth = 1280; // Assuming the size of your DrawPanel
+    private final int simulationHeight = 720;
     
     // Constructor, getters, setters
     public SimulatorState(){
         particles = new CopyOnWriteArrayList<>();
         walls = new CopyOnWriteArrayList<>();
     }
-    public void update(double deltaTime, DrawPanel drawPanel) {
+    public void update(double deltaTime) {
         // Logic to update particle positions and check for collisions
         particles.forEach(particle -> {
             Point2D.Double nextPosition = particle.getNextPosition(deltaTime);
@@ -24,7 +26,7 @@ public class SimulatorState {
             double closestDistance = Double.MAX_VALUE;
 
 
-            particle.checkCollisionWithBounds(drawPanel);
+            particle.checkCollisionWithBounds(simulationWidth, simulationHeight);
             for (Wall wall : walls) {
                 Optional<Point2D.Double> intersectionPoint = findIntersectionPoint(trajectory, wall.toLine2D());
                 if (intersectionPoint.isPresent()) {
