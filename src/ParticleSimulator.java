@@ -10,8 +10,11 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
@@ -42,7 +45,7 @@ public class ParticleSimulator extends JFrame {
     private int frames = 0;
     private int fps = 0;
     private long lastUpdateTime;
-
+    private ConcurrentHashMap<String, Sprite> clientSprites = new ConcurrentHashMap<>();
     private final ForkJoinPool pool;
     public ParticleSimulator() {
         super("Particle Simulator");
@@ -124,6 +127,7 @@ public class ParticleSimulator extends JFrame {
         add(splitPane);
         controlPanel.add(inputPanel, BorderLayout.NORTH);
         startServer();
+        startUdpServer();
 
     }
 
@@ -394,13 +398,63 @@ public class ParticleSimulator extends JFrame {
             e.printStackTrace();
         }
     }
-    private byte[] serializeParticlePositions() {
-        StringBuilder sb = new StringBuilder();
-        for (Particle particle : particles) {
-            sb.append(particle.x).append(",").append(particle.y).append(";");
-        }
-        return sb.toString().getBytes();
+    private void startUdpServer() {
+        Thread udpServerThread = new Thread(() -> {
+            try {
+                DatagramSocket socket = new DatagramSocket(4445); // Port number for the UDP server
+                byte[] buffer = new byte[1024];
+                System.out.println("Server listening on 4445");
+                while (true) {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(packet); // Receive packet from a client
+                    
+                    String received = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
+                    updateSpritePosition(received, packet.getAddress().toString() + ":" + packet.getPort());
+                }
+            } catch (SocketException e) {
+                System.err.println("SocketException in UDP server: " + e.getMessage());
+            } catch (IOException e) {
+                System.err.println("IOException in UDP server: " + e.getMessage());
+            }
+        });
+
+        udpServerThread.start();
     }
+    private void updateSpritePosition(String data, String clientId) {
+        // Example data format: "x:100,y:200"
+        System.out.println("DATA:" + data);
+        String[] parts = data.split(",");
+        int x = Integer.parseInt(parts[0].split(":")[1]);
+        int y = Integer.parseInt(parts[1].split(":")[1]);
+        
+        // Update or add sprite based on clientId
+        clientSprites.compute(clientId, (id, sprite) -> {
+            if (sprite == null) {
+                return new Sprite(x, y); // Create a new sprite if it doesn't exist
+            } else {
+                sprite.move(x - sprite.getX(), y - sprite.getY()); // Update existing sprite position
+                return sprite;
+            }
+        });
+        
+        // Optionally, broadcast updated positions to all clients here
+    }
+    private byte[] serializeParticlePositions() {
+        StringBuilder jsonBuilder = new StringBuilder();
+        jsonBuilder.append("[");
+        for (int i = 0; i < particles.size(); i++) {
+            Particle particle = particles.get(i);
+            jsonBuilder.append(String.format("{\"x\":%.2f,\"y\":%.2f}", particle.x, particle.y));
+            if (i < particles.size() - 1) {
+                jsonBuilder.append(",");
+            }
+        }
+        jsonBuilder.append("]");
+        String jsonString = jsonBuilder.toString();
+        return jsonString.getBytes();
+    }
+    
+    
     public int getAndResetFrameCount() {
         return actualFramesDrawn.getAndSet(0);
     }
