@@ -1,4 +1,0 @@
-cd src
-javac -d bin ParticleSimulator.java
-cd ../
-jar cvfm ParticleSimulator.jar manifest.txt -C src/bin . -C resources .

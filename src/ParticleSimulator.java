@@ -2,12 +2,18 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,18 +32,18 @@ public class ParticleSimulator extends JFrame {
     private final JTextField startWallField;
     private final JTextField endWallField;
     private final JComboBox<String> combobox;
+    private ExecutorService clientHandlerPool = Executors.newCachedThreadPool();
     private final JComboBox<String> multipleParticlesCombobox;
     private AtomicInteger actualFramesDrawn = new AtomicInteger();
     private long lastTime = System.nanoTime();
     private final double nsPerTick = 1000000000D / 60D;
+    private ServerSocket serverSocket;
+    private int port = 12345;
     private int frames = 0;
     private int fps = 0;
     private long lastUpdateTime;
 
     private final ForkJoinPool pool;
-    private final JComboBox<String> mode;
-    private Sprite sprite;
-    private boolean explorer = false;
     public ParticleSimulator() {
         super("Particle Simulator");
         pool = new ForkJoinPool();
@@ -66,38 +72,6 @@ public class ParticleSimulator extends JFrame {
         numParticlesField = new JTextField(10);
         endAngleField = new JTextField(10);
         endVelocityField = new JTextField(10);
-
-        String[] modeOptions = {"Developer Mode", "Explorer Mode"};
-        mode = new JComboBox<>(modeOptions);
-        mode.setPreferredSize(new Dimension(200, mode.getPreferredSize().height));
-        mode.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String option = (String) mode.getSelectedItem();
-                inputPanel.removeAll();
-                inputPanel.revalidate();
-                inputPanel.repaint();
-                if(option == "Developer Mode"){
-                    System.out.println("Developer Mode");
-                    explorer = false;
-                    sprite = null;
-                    showCombobox(inputPanel, true);
-                    // get selected string from combobox
-                    String particle = (String) combobox.getSelectedItem();
-                    if(particle == "Single Particle")
-                        showInputField(inputPanel, "Single Particle", "");
-                    else if(particle == "Multiple Particles")
-                        showInputField(inputPanel, "Multiple Particles", "Velocity & Angle");
-                }
-                else if(option == "Explorer Mode"){
-                    System.out.println("Explorer Mode");
-                    explorer = true;
-                    showModeCombobox(inputPanel);
-                    sprite = new Sprite(100, 100); // temp location
-                    setupKeyListener();
-                }
-            }
-        });
 
         String[] options = {"Single Particle", "Multiple Particles"};
         combobox = new JComboBox<>(options);
@@ -149,16 +123,49 @@ public class ParticleSimulator extends JFrame {
         splitPane.setDividerLocation(350);
         add(splitPane);
         controlPanel.add(inputPanel, BorderLayout.NORTH);
-
+        startServer();
 
     }
-    private void showModeCombobox(JPanel inputPanel){
-        inputPanel.add(new JLabel(" Mode:"));
-        inputPanel.add(mode);
+
+    private void showWallInput(JPanel inputPanel){
+        inputPanel.add(new JLabel(" Add new wall"));
+        inputPanel.add(new JLabel());
+        inputPanel.add(new JLabel(" Start (x,y):"));
+        inputPanel.add(startWallField);
+        inputPanel.add(new JLabel(" End (x,y):"));
+        inputPanel.add(endWallField);
+        inputPanel.add(new JPanel());
+        JButton addWallButton = new JButton("Add Wall");
+        inputPanel.add(addWallButton);
+        inputPanel.add(new JPanel());
+        inputPanel.add(new JPanel());
+
+        addWallButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    String startText = startWallField.getText();
+                    String endText = endWallField.getText();
+                    String[] startCoords = startText.split(",");
+                    String[] endCoords = endText.split(",");
+                    int startX = Integer.parseInt(startCoords[0].trim());
+                    int startY = Integer.parseInt(startCoords[1].trim());
+                    int endX = Integer.parseInt(endCoords[0].trim());
+                    int endY = Integer.parseInt(endCoords[1].trim());
+                    if (startX < 0 || startY < 0 || endX < 0 || endY < 0 || startX > drawPanel.getWidth() || startY > drawPanel.getHeight() || endX > drawPanel.getWidth() || endY > drawPanel.getHeight()) {
+                        JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input. Please check your values.", "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    walls.add(new Wall(startX, startY, endX, endY));
+                    drawPanel.repaint();
+                } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
+                    JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
     }
-    
     private void showCombobox(JPanel inputPanel, Boolean show){
-        //showWallInput(inputPanel);
+        showWallInput(inputPanel);
         inputPanel.add(new JLabel(" Add:"));
         inputPanel.add(combobox);
         if(show == true){
@@ -167,10 +174,6 @@ public class ParticleSimulator extends JFrame {
         }
     }
     private void showInputField(JPanel inputPanel, String particle, String constant){
-        inputPanel.removeAll();
-        inputPanel.revalidate();
-        inputPanel.repaint();
-        showModeCombobox(inputPanel);
         Boolean show = false;
         if(particle == "Multiple Particles"){
             show = true;
@@ -373,29 +376,54 @@ public class ParticleSimulator extends JFrame {
             }
         }
     }
+    private void setupSimulation() {
+        // Initialize simulation entities here
+
+
+    }
+    private void broadcastParticlePositions() {
+        try {
+            DatagramSocket socket = new DatagramSocket();
+            byte[] data = serializeParticlePositions();
+            InetAddress group = InetAddress.getByName("230.0.0.1"); // Example multicast address
+            int port = 4446; // Example port
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
+            socket.send(packet);
+            socket.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    private byte[] serializeParticlePositions() {
+        StringBuilder sb = new StringBuilder();
+        for (Particle particle : particles) {
+            sb.append(particle.x).append(",").append(particle.y).append(";");
+        }
+        return sb.toString().getBytes();
+    }
     public int getAndResetFrameCount() {
         return actualFramesDrawn.getAndSet(0);
     }
     private void startGameLoop() {
         new Thread(() -> {
             final int targetFPS = 60;
-            final long targetTimePerFrame = 1000 / targetFPS;
+            final long targetTimePerFrame = 1000 / targetFPS; 
             long timer = System.currentTimeMillis();
-            long lastLoopTime = System.currentTimeMillis();
+            long lastLoopTime = System.currentTimeMillis(); 
             while (true) {
                 long now = System.currentTimeMillis();
                 long elapsedTime = now - lastLoopTime;
                 lastLoopTime = now;
                 SwingUtilities.invokeLater(drawPanel::repaint);
-
+    
                 if (System.currentTimeMillis() - timer > 500) {
                     fps = getAndResetFrameCount();
                     timer += 1000;
                 }
-                long sleepTime = targetTimePerFrame - elapsedTime;
+                long sleepTime = targetTimePerFrame - elapsedTime; 
                 if (sleepTime > 0) {
                     try {
-                        Thread.sleep(sleepTime);
+                        Thread.sleep(sleepTime); 
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
@@ -404,9 +432,31 @@ public class ParticleSimulator extends JFrame {
             }
         }, "Game Loop Thread").start();
     }
+    
+    
+    private void startServer() {
+        try {
+            serverSocket = new ServerSocket(port);
+            System.out.println("Server started on port " + port);
 
-
-
+            Thread acceptThread = new Thread(() -> {
+                while (!serverSocket.isClosed()) {
+                    try {
+                        Socket clientSocket = serverSocket.accept();
+                        clientHandlerPool.submit(() -> handleClient(clientSocket));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            acceptThread.start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    private void handleClient(Socket clientSocket) {
+        // Handle client communication
+    }
     private void startSimulationThread() {
         Runnable simulationTask = () -> {
             while (!Thread.currentThread().isInterrupted()) {
@@ -415,12 +465,12 @@ public class ParticleSimulator extends JFrame {
                 lastUpdateTime = now;
                 ParticleUpdateAction updateAction = new ParticleUpdateAction(particles, 0, particles.size(), deltaTime);
                 pool.invoke(updateAction);
-
+                broadcastParticlePositions();
 
                 SwingUtilities.invokeLater(drawPanel::repaint);
 
                 try {
-                    Thread.sleep(16);
+                    Thread.sleep(16); 
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -437,7 +487,7 @@ public class ParticleSimulator extends JFrame {
         double x4 = line2.getX2(), y4 = line2.getY2();
 
         double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-        if (den == 0) return Optional.empty();
+        if (den == 0) return Optional.empty(); 
 
         double t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
         double u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
@@ -448,69 +498,23 @@ public class ParticleSimulator extends JFrame {
             return Optional.of(new Point2D.Double(x, y));
         }
 
-        return Optional.empty();
+        return Optional.empty(); 
     }
-
+    public void sendSpritePosition(DatagramSocket socket, InetAddress serverAddress, int serverPort, int x, int y) throws IOException {
+        String message = "SPRITE_POSITION " + x + " " + y;
+        byte[] buffer = message.getBytes();
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, serverAddress, serverPort);
+        socket.send(packet);
+    }
+    
     class DrawPanel extends JPanel {
-        private int peripheryWidth = 33;
-        private int peripheryHeight = 19;
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
-            g.setColor(Color.BLACK);
-
-            if(explorer){
-                explorer(g);
-            }
-            else{
-                developer(g);
-            }
-        }
-
-        private void explorer(Graphics g) {
-            int canvasWidth = drawPanel.getWidth();
-            int canvasHeight = drawPanel.getHeight();
-            int spriteCenterX = sprite.getX();
-            int spriteCenterY = sprite.getY();
-
-            int leftBound = spriteCenterX - peripheryWidth / 2;
-            int rightBound = spriteCenterX + peripheryWidth / 2;
-            int topBound = spriteCenterY + peripheryHeight / 2;
-            int bottomBound = spriteCenterY - peripheryHeight / 2;
-
-            double scaleX = (double) canvasWidth / peripheryWidth;
-            double scaleY = (double) canvasHeight / peripheryHeight;
-
-            sprite.draw(g, drawPanel);
-
-            for (Particle particle : particles) {
-                if (particle.getX()+5 >= leftBound && particle.getX() -5<= rightBound &&
-                    particle.getY()+5 >= bottomBound && particle.getY()-5 <= topBound) {
-                        int relativeX = (int) particle.getX() - leftBound;
-                        int relativeY = topBound - (int) particle.getY();
-
-                        int scaledParticleX = (int) (relativeX * scaleX);
-                        int scaledParticleY = (int) (relativeY * scaleY);
-                        particle.drawScaled(g, scaledParticleX, scaledParticleY);
-                }
-            }
-
-            
-            g.drawString("FPS: " + fps, 10, 20);
-            actualFramesDrawn.incrementAndGet();
-        }
-
-
-
-        private void developer(Graphics g){
             for (Particle p : particles) {
                 p.draw(g);
             }
             walls.parallelStream().forEach(w -> w.draw(g));
-            if(sprite != null){
-                sprite.draw(g, drawPanel);
-            }
-
             g.drawString("FPS: " + fps, 10, 20);
             actualFramesDrawn.incrementAndGet();
         }
@@ -540,8 +544,8 @@ public class ParticleSimulator extends JFrame {
                     Point2D.Double closestCollision = null;
                     Wall closestWall = null;
                     double closestDistance = Double.MAX_VALUE;
-
-
+                    
+    
                     particle.checkCollisionWithBounds(drawPanel);
                     for (Wall wall : walls) {
                         Optional<Point2D.Double> intersectionPoint = findIntersectionPoint(trajectory, wall.toLine2D());
@@ -573,7 +577,7 @@ public class ParticleSimulator extends JFrame {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new ParticleSimulator().setVisible(true));
     }
-    public class Particle {
+    class Particle {
         double x, y;
         double angle, velocity;
 
@@ -583,34 +587,10 @@ public class ParticleSimulator extends JFrame {
             this.angle = Math.toRadians(angle);
             this.velocity = velocity;
         }
-        public void drawScaled(Graphics g, int scaledX, int scaledY) {
-            int canvasWidth = drawPanel.getWidth(); // 1280
-            int canvasHeight = drawPanel.getHeight(); // 720
-        
-            // Periphery dimensions
-            final int peripheryWidth = 33;
-            final int peripheryHeight = 19;
 
-            double scaleX = (double) canvasWidth / peripheryWidth;
-            double scaleY = (double) canvasHeight / peripheryHeight;
-
-            double scale = Math.min(scaleX, scaleY);
-            int spriteWidth = 5; 
-            int spriteHeight = 5; 
-            int scaledWidth = (int) (spriteWidth * scale);
-            int scaledHeight = (int) (spriteHeight * scale);
-            g.setColor(Color.BLACK); 
-            g.fillOval(scaledX, scaledY, scaledWidth, scaledHeight);
-        }
         public void move(double deltaTime) {
             x += velocity * Math.cos(angle) * deltaTime;
             y += velocity * Math.sin(angle) * deltaTime;
-        }
-        public double getX(){
-            return x;
-        }
-        public double getY(){
-            return y;
         }
         public void checkCollisionWithBounds(DrawPanel drawPanel) {
             if (x < 0 || x > drawPanel.getWidth()) {
@@ -643,7 +623,7 @@ public class ParticleSimulator extends JFrame {
         }
     }
 
-    public class Wall {
+    class Wall {
         int startX, startY, endX, endY;
 
         public Wall(int startX, int startY, int endX, int endY) {
@@ -660,44 +640,5 @@ public class ParticleSimulator extends JFrame {
         public void draw(Graphics g) {
             g.drawLine(startX, drawPanel.getHeight() - startY, endX, drawPanel.getHeight() - endY);
         }
-    }
-
-    // SPRITE
-    public void moveSprite(int dx, int dy) {
-        if (sprite != null) {
-            int newX = sprite.getX() + dx;
-            int newY = sprite.getY() + dy;
-            int canvasWidth = drawPanel.getWidth();
-            int canvasHeight = drawPanel.getHeight();
-            int spriteWidth = sprite.getX();
-            int spriteHeight = sprite.getY();
-
-            if (newX >= 0 && newX + spriteWidth <= canvasWidth && newY >= 0 && newY + spriteHeight <= canvasHeight) {
-                sprite.move(dx, dy);
-                drawPanel.repaint();
-            }
-            else
-                JOptionPane.showMessageDialog(this, "Sprite reached the end of the canvas", "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    private void setupKeyListener() {
-        drawPanel.setFocusable(true);
-        drawPanel.requestFocus(); // Ensure the panel has focus
-        drawPanel.addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                int keyCode = e.getKeyCode();
-                if (keyCode == KeyEvent.VK_W || keyCode == KeyEvent.VK_UP) {
-                    moveSprite(0, 1);
-                } else if (keyCode == KeyEvent.VK_A || keyCode == KeyEvent.VK_LEFT) {
-                    moveSprite(-1, 0);
-                } else if (keyCode == KeyEvent.VK_S || keyCode == KeyEvent.VK_DOWN) {
-                    moveSprite(0, -1);
-                } else if (keyCode == KeyEvent.VK_D || keyCode == KeyEvent.VK_RIGHT) {
-                    moveSprite(1, 0);
-                }
-            }
-        });
     }
 }

@@ -1,8 +1,8 @@
-# Problem Set #2: Concurrent Programming w/ Dependencies
+# Problem Set #1: Concurrent Programming w/o Dependencies
 
 ## Introduction
 
-This Problem Set enhances the user experience by adding a dynamic 'explorer mode' to the current particle simulator, allowing interactive exploration inside the simulation environment. This option allows users to move a sprite about the canvas, making the experience more realistic. The algorithm cleverly determines and renders the particle placements in relation to the sprite's perimeter as it moves around the canvas. To guarantee a fluid and responsive simulation that captures the sprite's interactions with surrounding objects, this calls for intricate dependency management.
+The Particle Simulator project is a prime example of sophisticated Java programming methods, especially when it comes to multithreading. In order to ensure that demanding computational activities do not impair the responsiveness of the user interface, the program primarily runs two threads: one for the simulation logic and another for the graphical rendering. Using a ForkJoinPool to efficiently process particle updates in parallel, the simulation thread controls particle movements, collision detection, and physics calculations. Thousands of particles can be simulated in real time using this method, displaying intricate behaviors including interactions and collisions with walls. A smooth and dynamic depiction of particle systems is achieved by the project's use of Java concurrency, which separates the computing workload of the simulation from the GUI presentation.ultiple threads to maximize CPU utilization. 
 
 ## Run Guide
 
@@ -10,6 +10,5 @@ To run the JAR file:
 ``` java -jar ParticleSimulator.jar ```
 
 To compile:
-``` cd src ```
 ``` javac ParticleSimulator.java ```
 ``` java ParticleSimulator ```

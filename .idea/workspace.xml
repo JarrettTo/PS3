@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="6880c96c-8d28-43bf-901a-e948a17461de" name="Changes" comment="- changed input limit&#10;- add parallelstream">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$1.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$2.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$2.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$3.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$3.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$4.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$4.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$5.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$5.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$6.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$6.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$7.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$7.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$DrawPanel.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$DrawPanel.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$Particle.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$Particle.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$ParticleUpdateAction.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$ParticleUpdateAction.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator$Wall.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator$Wall.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator.class" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ParticleSimulator.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/ParticleSimulator.java" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Class" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="Test_Branch" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
+  <component name="ProjectId" id="2bi8cRzvMUJ3YNvE8LMAc9TYEvs" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.Main.executor&quot;: &quot;Run&quot;,
+    &quot;Application.ParticleSimulator.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Alyssa/Downloads/BouncingPixel/BouncingPixel&quot;
+  }
+}</component>
+  <component name="RunManager" selected="Application.ParticleSimulator">
+    <configuration name="Main" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="Main" />
+      <module name="STDISCM_PS1" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="ParticleSimulator" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="ParticleSimulator" />
+      <module name="STDISCM_PS1" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Application.ParticleSimulator" />
+        <item itemvalue="Application.Main" />
+        <item itemvalue="Application.ParticleSimulator" />
+        <item itemvalue="Application.ParticleSimulator" />
+        <item itemvalue="Application.ParticleSimulator" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="jdk-15.0.2-corretto-15.0.2-4caba194b151-9bc2d75a" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="6880c96c-8d28-43bf-901a-e948a17461de" name="Changes" comment="" />
+      <created>1706686620473</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1706686620473</updated>
+    </task>
+    <task id="LOCAL-00001" summary="PS1">
+      <option name="closed" value="true" />
+      <created>1706686710048</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1706686710048</updated>
+    </task>
+    <task id="LOCAL-00002" summary="- added input panel (add wall and particle)&#10;- fixed collisions with the canvas bounds">
+      <option name="closed" value="true" />
+      <created>1707054781187</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1707054781187</updated>
+    </task>
+    <task id="LOCAL-00003" summary="- added input for multiple particles">
+      <option name="closed" value="true" />
+      <created>1707187994078</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1707187994078</updated>
+    </task>
+    <task id="LOCAL-00004" summary="- fixed input panel">
+      <option name="closed" value="true" />
+      <created>1707233907660</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1707233907660</updated>
+    </task>
+    <task id="LOCAL-00005" summary="- fixed input panel">
+      <option name="closed" value="true" />
+      <created>1707302866465</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1707302866465</updated>
+    </task>
+    <task id="LOCAL-00006" summary="- added multiple particle logic">
+      <option name="closed" value="true" />
+      <created>1707460887730</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1707460887730</updated>
+    </task>
+    <task id="LOCAL-00007" summary="- fixed create new particle&#10;- fixed bounce">
+      <option name="closed" value="true" />
+      <created>1707472223339</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1707472223339</updated>
+    </task>
+    <task id="LOCAL-00008" summary="- added update simulation&#10;- added check collision">
+      <option name="closed" value="true" />
+      <created>1707792388304</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1707792388304</updated>
+    </task>
+    <task id="LOCAL-00009" summary="- fixed coordinates and angle">
+      <option name="closed" value="true" />
+      <created>1708017463266</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1708017463267</updated>
+    </task>
+    <task id="LOCAL-00010" summary="- removed angle limit">
+      <option name="closed" value="true" />
+      <created>1708018005034</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1708018005034</updated>
+    </task>
+    <task id="LOCAL-00011" summary="- added error message for input">
+      <option name="closed" value="true" />
+      <created>1708079651035</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1708079651035</updated>
+    </task>
+    <task id="LOCAL-00012" summary="- fixed multiple particles formula">
+      <option name="closed" value="true" />
+      <created>1708088398422</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1708088398422</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="RECENT_FILTERS">
+      <map>
+        <entry key="Branch">
+          <value>
+            <list>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="Load_Balanced" />
+                </option>
+              </RecentGroup>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="origin/Load_Balanced" />
+                </option>
+              </RecentGroup>
+            </list>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="PS1" />
+    <MESSAGE value="- added input panel (add wall and particle)&#10;- fixed collisions with the canvas bounds" />
+    <MESSAGE value="- fixed input of adding 1 particle" />
+    <MESSAGE value="- added input for multiple particles" />
+    <MESSAGE value="- fixed input panel" />
+    <MESSAGE value="- added multiple particle logic" />
+    <MESSAGE value="- fixed create new particle&#10;- fixed bounce" />
+    <MESSAGE value="- added update simulation&#10;- added check collision" />
+    <MESSAGE value="- fixed coordinates and angle" />
+    <MESSAGE value="- removed angle limit" />
+    <MESSAGE value="- added error message for input" />
+    <MESSAGE value="- fixed multiple particles formula" />
+    <MESSAGE value="- changed input limit&#10;- add parallelstream" />
+    <option name="LAST_COMMIT_MESSAGE" value="- changed input limit&#10;- add parallelstream" />
+  </component>
+</project>
