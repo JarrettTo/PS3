@@ -218,6 +218,7 @@ public class ParticleSimulator extends JFrame {
                             return;
                         }
                         particles.add(new Particle(startX, startY, angle, velocity));
+                        broadcastParticlePositions();
                         drawPanel.repaint();
                     } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                         JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
@@ -444,7 +445,11 @@ public class ParticleSimulator extends JFrame {
         jsonBuilder.append("[");
         for (int i = 0; i < particles.size(); i++) {
             Particle particle = particles.get(i);
-            jsonBuilder.append(String.format("{\"x\":%.2f,\"y\":%.2f}", particle.x, particle.y));
+            // Include velocity and angle in the JSON string.
+            jsonBuilder.append(String.format(
+                "{\"x\":%.2f,\"y\":%.2f,\"velocity\":%.2f,\"angle\":%.2f}",
+                particle.x, particle.y, particle.velocity, Math.toDegrees(particle.angle) // Convert radian to degrees if needed
+            ));
             if (i < particles.size() - 1) {
                 jsonBuilder.append(",");
             }
@@ -519,7 +524,7 @@ public class ParticleSimulator extends JFrame {
                 lastUpdateTime = now;
                 ParticleUpdateAction updateAction = new ParticleUpdateAction(particles, 0, particles.size(), deltaTime);
                 pool.invoke(updateAction);
-                broadcastParticlePositions();
+                
 
                 SwingUtilities.invokeLater(drawPanel::repaint);
 
