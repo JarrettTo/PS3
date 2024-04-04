@@ -49,7 +49,7 @@ public class ExplorerSimulator extends JFrame {
     private long lastUpdateTime;
     private ConcurrentHashMap<String, Sprite> clientSprites = new ConcurrentHashMap<>();
     private final ForkJoinPool pool;
-
+    private long lastHeartbeatTime = System.currentTimeMillis();
     private Sprite sprite;
     private boolean explorer = false;
     public ExplorerSimulator() {
@@ -96,12 +96,50 @@ public class ExplorerSimulator extends JFrame {
                 System.exit(0);
             }
         });
+        listenForHeartbeat();
+        startHeartbeatChecker();
     }
     private void showModeCombobox(JPanel inputPanel){
         inputPanel.add(new JLabel(" Mode:"));
 
     }
+    private void startHeartbeatChecker() {
+        new Thread(() -> {
+            while (true) {
+                long currentTime = System.currentTimeMillis();
+                if (currentTime - lastHeartbeatTime > 30000) { // 30 seconds without heartbeat
+                    JOptionPane.showMessageDialog(null, "Lost connection to the server. Closing.");
+                    System.exit(0); // Close the client
+                }
+                try {
+                    Thread.sleep(5000); // Check every 5 seconds
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }).start();
+    }
     
+    private void listenForHeartbeat() {
+        Thread listenerThread = new Thread(() -> {
+            try (MulticastSocket socket = new MulticastSocket(4449)) { // Use the appropriate port
+                InetAddress group = InetAddress.getByName("230.0.0.1");
+                socket.joinGroup(group);
+                byte[] buffer = new byte[1024];
+                while (true) {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(packet);
+                    String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
+                    if (message.contains("\"heartbeat\":true")) {
+                        lastHeartbeatTime = System.currentTimeMillis(); // Update last heartbeat time
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+        listenerThread.start();
+    }
     private void sendDisconnectMessage() {
         try {
             DatagramSocket socket = new DatagramSocket();
