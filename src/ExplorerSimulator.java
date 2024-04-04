@@ -4,18 +4,28 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
+import java.io.IOException;
 import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.UUID;
 
 public class ExplorerSimulator extends JFrame {
     private ArrayList<Particle> particles;
@@ -30,14 +40,14 @@ public class ExplorerSimulator extends JFrame {
     private final JTextField numParticlesField;
     private final JTextField startWallField;
     private final JTextField endWallField;
-
+    private final String clientId;
     private AtomicInteger actualFramesDrawn = new AtomicInteger();
     private long lastTime = System.nanoTime();
     private final double nsPerTick = 1000000000D / 60D;
     private int frames = 0;
     private int fps = 0;
     private long lastUpdateTime;
-
+    private ConcurrentHashMap<String, Sprite> clientSprites = new ConcurrentHashMap<>();
     private final ForkJoinPool pool;
 
     private Sprite sprite;
@@ -70,22 +80,44 @@ public class ExplorerSimulator extends JFrame {
         numParticlesField = new JTextField(10);
         endAngleField = new JTextField(10);
         endVelocityField = new JTextField(10);
-
+        clientId = UUID.randomUUID().toString();
 
         System.out.println("Explorer Mode");
         explorer = true;
         showModeCombobox(inputPanel);
-        sprite = new Sprite(100, 100); // temp location
+        sprite = new Sprite(100, 100); 
         setupKeyListener();
         startUdpClient();
-        
+        sendSpritePosition(sprite.getX(), sprite.getY());
+        this.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                sendDisconnectMessage();
+                System.exit(0);
+            }
+        });
     }
     private void showModeCombobox(JPanel inputPanel){
         inputPanel.add(new JLabel(" Mode:"));
 
     }
     
-    
+    private void sendDisconnectMessage() {
+        try {
+            DatagramSocket socket = new DatagramSocket();
+            InetAddress serverAddress = InetAddress.getByName("localhost");
+            int serverPort = 4445; 
+            
+            String message = String.format("{\"clientId\":\"%s\",\"disconnect\":true}", clientId);
+            byte[] buffer = message.getBytes();
+            
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, serverAddress, serverPort);
+            socket.send(packet);
+            socket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
     
     public int getAndResetFrameCount() {
         return actualFramesDrawn.getAndSet(0);
@@ -125,7 +157,7 @@ public class ExplorerSimulator extends JFrame {
                 InetAddress group = InetAddress.getByName("230.0.0.1");
                 socket.joinGroup(group);
                 
-                byte[] buffer = new byte[1024];
+                byte[] buffer = new byte[1048576];
                 while (true) {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
@@ -137,8 +169,82 @@ public class ExplorerSimulator extends JFrame {
             }
         });
         udpClientThread.start();
+        Thread udpClientThreadForSprites = new Thread(() -> {
+            receiveMulticastData(4447, this::updateSpritesFromJson);
+        });
+        udpClientThreadForSprites.start();
+        listenForShutdownSignal();
     }
+    private void listenForShutdownSignal() {
+        Thread listenerThread = new Thread(() -> {
+            try (MulticastSocket socket = new MulticastSocket(4448)) { 
+                InetAddress group = InetAddress.getByName("230.0.0.1");
+                socket.joinGroup(group);
+                byte[] buffer = new byte[1024];
+                while (true) {
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(packet);
+                    String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
+                    if (message.contains("\"shutdown\":true")) {
+
+                        System.exit(0);
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+        listenerThread.start();
+    }
+
+    private void receiveMulticastData(int port, Consumer<String> dataHandler) {
+        try (MulticastSocket socket = new MulticastSocket(port)) {
+            InetAddress group = InetAddress.getByName("230.0.0.1");
+            socket.joinGroup(group);
+            byte[] buffer = new byte[1024];
+            while (true) {
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                socket.receive(packet);
+                String receivedJson = new String(packet.getData(), 0, packet.getLength());
+                dataHandler.accept(receivedJson);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    private void updateSpritesFromJson(String json) {
+        Set<String> receivedClientIds = new HashSet<>();
+        Pattern pattern = Pattern.compile("\\{\"clientId\":\"(.*?)\",\"x\":(\\d+),\"y\":(\\d+)\\}");
+        Matcher matcher = pattern.matcher(json);
+        System.out.println("DATA:" + json);
+        SwingUtilities.invokeLater(() -> {
+            while (matcher.find()) {
+                String clientId = matcher.group(1);
+                int x = Integer.parseInt(matcher.group(2));
+                int y = Integer.parseInt(matcher.group(3));
+                receivedClientIds.add(clientId); 
+              
+                if (!clientId.equals(this.clientId)) {
+                    clientSprites.compute(clientId, (id, sprite) -> {
+                        if (sprite == null) {
+                            sprite = new Sprite(x, y);
+                        } else {
+                            sprite.setX(x); 
+                            sprite.setY(y);
+                        }
+                        return sprite;
+                    });
+                }
+            }
+
+            clientSprites.keySet().removeIf(clientId -> !receivedClientIds.contains(clientId));
+            
+            drawPanel.repaint();
+        });
+    }
+
     private void updateParticlesFromJson(String json) {
+        System.out.println("DATA" + json);
         Pattern pattern = Pattern.compile("\\{\"x\":(.*?),\"y\":(.*?),\"velocity\":(.*?),\"angle\":(.*?)\\}");
         Matcher matcher = pattern.matcher(json);
         ArrayList<Particle> updatedParticles = new ArrayList<>();
@@ -148,22 +254,23 @@ public class ExplorerSimulator extends JFrame {
                 double x = Double.parseDouble(matcher.group(1));
                 double y = Double.parseDouble(matcher.group(2));
                 double velocity = Double.parseDouble(matcher.group(3));
-                double angle = Double.parseDouble(matcher.group(4)); // Assuming angle is in degrees
+                double angle = Double.parseDouble(matcher.group(4)); 
     
                 updatedParticles.add(new Particle(x, y, angle, velocity));
             } catch (NumberFormatException e) {
-                // Handle the case where parsing fails
                 e.printStackTrace();
             }
         }
         
         SwingUtilities.invokeLater(() -> {
-            // Directly set the particles list to the updated list
             particles = updatedParticles;
             drawPanel.repaint();
         });
     }
 
+    
+    
+    
     private void startSimulationThread() {
         Runnable simulationTask = () -> {
             while (!Thread.currentThread().isInterrupted()) {
@@ -225,6 +332,11 @@ public class ExplorerSimulator extends JFrame {
         }
 
         private void explorer(Graphics g) {
+            if (sprite == null) {
+                sprite = new Sprite(100, 100);
+  
+                return; 
+            }
             int canvasWidth = drawPanel.getWidth();
             int canvasHeight = drawPanel.getHeight();
             int spriteCenterX = sprite.getX();
@@ -238,7 +350,7 @@ public class ExplorerSimulator extends JFrame {
             double scaleX = (double) canvasWidth / peripheryWidth;
             double scaleY = (double) canvasHeight / peripheryHeight;
 
-            sprite.draw(g, drawPanel);
+            sprite.drawScaledSquare(g, drawPanel);
 
             for (Particle particle : particles) {
                 if (particle.getX()+5 >= leftBound && particle.getX() -5<= rightBound &&
@@ -251,7 +363,7 @@ public class ExplorerSimulator extends JFrame {
                         particle.drawScaled(g, scaledParticleX, scaledParticleY);
                 }
             }
-
+            drawOtherSprites(g, spriteCenterX, spriteCenterY, scaleX, scaleY); 
             
             g.drawString("FPS: " + fps + " X: "+ spriteCenterX+ " Y: "+spriteCenterY, 10, 20);
             actualFramesDrawn.incrementAndGet();
@@ -265,11 +377,31 @@ public class ExplorerSimulator extends JFrame {
             }
             walls.parallelStream().forEach(w -> w.draw(g));
             if(sprite != null){
-                sprite.draw(g, drawPanel);
+                sprite.drawScaledSquare(g, drawPanel);
             }
 
             g.drawString("FPS: " + fps, 10, 20);
             actualFramesDrawn.incrementAndGet();
+        }
+        private void drawOtherSprites(Graphics g, int centerX, int centerY, double scaleX, double scaleY) {
+            int leftBound = centerX - peripheryWidth / 2;
+            int rightBound = centerX + peripheryWidth / 2;
+            int topBound = centerY + peripheryHeight / 2;
+            int bottomBound = centerY - peripheryHeight / 2;
+    
+            for (Sprite s : clientSprites.values()) {
+
+                if (s.getX()+5 >= leftBound && s.getX()-5 <= rightBound &&
+                    s.getY()+5 >= bottomBound && s.getY()-5 <= topBound) {
+                    
+                    int relativeX = (int) (scaleX * (s.getX() - leftBound));
+                    int relativeY = (int) (scaleY * (topBound - s.getY()));
+                    int scaledSpriteX = (int) (relativeX * scaleX);
+                    int scaledSpriteY = (int) (relativeY * scaleY);
+
+                    s.drawScaledSquareOtherSprites(g, relativeX, relativeY, this); 
+                }
+            }
         }
     }
     class ParticleUpdateAction extends RecursiveAction {
@@ -341,10 +473,9 @@ public class ExplorerSimulator extends JFrame {
             this.velocity = velocity;
         }
         public void drawScaled(Graphics g, int scaledX, int scaledY) {
-            int canvasWidth = drawPanel.getWidth(); // 1280
-            int canvasHeight = drawPanel.getHeight(); // 720
+            int canvasWidth = drawPanel.getWidth(); 
+            int canvasHeight = drawPanel.getHeight(); 
         
-            // Periphery dimensions
             final int peripheryWidth = 33;
             final int peripheryHeight = 19;
 
@@ -435,12 +566,29 @@ public class ExplorerSimulator extends JFrame {
             }
             else
                 JOptionPane.showMessageDialog(this, "Sprite reached the end of the canvas", "Error", JOptionPane.ERROR_MESSAGE);
+            sendSpritePosition(sprite.getX(), sprite.getY());
         }
     }
-
+    private void sendSpritePosition(int x, int y) {
+        try {
+            DatagramSocket socket = new DatagramSocket();
+            InetAddress serverAddress = InetAddress.getByName("localhost");
+            int serverPort = 4445; 
+            
+            String message = String.format("{\"clientId\":\"%s\",\"spriteX\":%d,\"spriteY\":%d}", clientId, x, y);
+            byte[] buffer = message.getBytes();
+            
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, serverAddress, serverPort);
+            socket.send(packet);
+            socket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
     private void setupKeyListener() {
         drawPanel.setFocusable(true);
-        drawPanel.requestFocus(); // Ensure the panel has focus
+        drawPanel.requestFocus(); 
         drawPanel.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {

@@ -19,7 +19,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ParticleSimulator extends JFrame {
     private final ArrayList<Particle> particles;
@@ -34,6 +38,7 @@ public class ParticleSimulator extends JFrame {
     private final JTextField numParticlesField;
     private final JTextField startWallField;
     private final JTextField endWallField;
+    private ScheduledExecutorService scheduler;
     private final JComboBox<String> combobox;
     private ExecutorService clientHandlerPool = Executors.newCachedThreadPool();
     private final JComboBox<String> multipleParticlesCombobox;
@@ -61,7 +66,7 @@ public class ParticleSimulator extends JFrame {
         setVisible(true);
         startSimulationThread();
         startGameLoop();
-
+        startScheduler();
         JPanel controlPanel = new JPanel();
         controlPanel.setLayout(new BorderLayout());
         JPanel inputPanel = new JPanel();
@@ -128,9 +133,28 @@ public class ParticleSimulator extends JFrame {
         controlPanel.add(inputPanel, BorderLayout.NORTH);
         startServer();
         startUdpServer();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                broadcastShutdownMessage();
+            } catch (IOException e) {
+                System.out.println("Error sending shutdown message: " + e.getMessage());
+            }
+        }));
 
     }
-
+    private void broadcastShutdownMessage() throws IOException {
+        String shutdownMsg = "{\"shutdown\":true}";
+        byte[] data = shutdownMsg.getBytes(StandardCharsets.UTF_8);
+        InetAddress group = InetAddress.getByName("230.0.0.1"); // Use the same multicast group as for particle updates
+        // Consider using a distinct port or ensure clients also listen for this shutdown message
+        int port = 4448; // Example port for shutdown messages
+        
+        try (DatagramSocket socket = new DatagramSocket()) {
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
+            socket.send(packet);
+        }
+    }
+    
     private void showWallInput(JPanel inputPanel){
         inputPanel.add(new JLabel(" Add new wall"));
         inputPanel.add(new JLabel());
@@ -272,6 +296,7 @@ public class ParticleSimulator extends JFrame {
                                 particles.add(new Particle((int)x, (int)y, angle, velocity));
                             }
                             drawPanel.repaint();
+                            broadcastParticlePositions();
                         } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                             JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
                         }
@@ -322,6 +347,7 @@ public class ParticleSimulator extends JFrame {
                                 particles.add(new Particle(startX, startY, angle, velocity));
                             }
                             drawPanel.repaint();
+                            broadcastParticlePositions();
                         } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                             JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
                         }
@@ -373,6 +399,7 @@ public class ParticleSimulator extends JFrame {
                                 particles.add(new Particle(startX, startY, angle, v));
                             }
                             drawPanel.repaint();
+                            broadcastParticlePositions();
                         } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                             JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
                         }
@@ -381,17 +408,33 @@ public class ParticleSimulator extends JFrame {
             }
         }
     }
-    private void setupSimulation() {
-        // Initialize simulation entities here
 
+    private byte[] serializeParticlePositions() {
+        StringBuilder jsonBuilder = new StringBuilder();
+        jsonBuilder.append("[");
+        for (int i = 0; i < particles.size(); i++) {
+            Particle particle = particles.get(i);
 
+            jsonBuilder.append(String.format(
+                "{\"x\":%.2f,\"y\":%.2f,\"velocity\":%.2f,\"angle\":%.2f}",
+                particle.x, particle.y, particle.velocity, Math.toDegrees(particle.angle) 
+            ));
+            if (i < particles.size() - 1) {
+                jsonBuilder.append(",");
+            }
+        }
+        jsonBuilder.append("]");
+        String jsonString = jsonBuilder.toString();
+        return jsonString.getBytes();
     }
+    
     private void broadcastParticlePositions() {
+        System.out.println("BROADCAST!");
         try {
             DatagramSocket socket = new DatagramSocket();
             byte[] data = serializeParticlePositions();
-            InetAddress group = InetAddress.getByName("230.0.0.1"); // Example multicast address
-            int port = 4446; // Example port
+            InetAddress group = InetAddress.getByName("230.0.0.1"); 
+            int port = 4446;
             DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
             socket.send(packet);
             socket.close();
@@ -399,18 +442,63 @@ public class ParticleSimulator extends JFrame {
             e.printStackTrace();
         }
     }
+    public void stopScheduler() {
+        if (scheduler != null) {
+            scheduler.shutdown();
+            try {
+                if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                scheduler.shutdownNow();
+            }
+        }
+    }
+    private byte[] serializeSpritePositions() {
+        StringBuilder jsonBuilder = new StringBuilder();
+        jsonBuilder.append("[");
+
+        clientSprites.forEach((clientId, sprite) -> {
+            jsonBuilder.append(String.format(
+                "{\"clientId\":\"%s\",\"x\":%d,\"y\":%d}",
+                clientId, sprite.getX(), sprite.getY()
+            ));
+            jsonBuilder.append(",");
+        });
+    
+        if (jsonBuilder.length() > 1) {
+            jsonBuilder.setLength(jsonBuilder.length() - 1); 
+        }
+        jsonBuilder.append("]");
+        return jsonBuilder.toString().getBytes();
+    }
+    private void broadcastSpritePositions() {
+        try {
+            DatagramSocket socket = new DatagramSocket();
+            byte[] data = serializeSpritePositions();
+            InetAddress group = InetAddress.getByName("230.0.0.1"); 
+            int port = 4447; 
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
+            socket.send(packet);
+            socket.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
     private void startUdpServer() {
         Thread udpServerThread = new Thread(() -> {
             try {
-                DatagramSocket socket = new DatagramSocket(4445); // Port number for the UDP server
+                DatagramSocket socket = new DatagramSocket(4445); 
                 byte[] buffer = new byte[1024];
                 System.out.println("Server listening on 4445");
                 while (true) {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    socket.receive(packet); // Receive packet from a client
+                    socket.receive(packet); 
                     
                     String received = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
                     updateSpritePosition(received, packet.getAddress().toString() + ":" + packet.getPort());
+                    
                 }
             } catch (SocketException e) {
                 System.err.println("SocketException in UDP server: " + e.getMessage());
@@ -421,43 +509,50 @@ public class ParticleSimulator extends JFrame {
 
         udpServerThread.start();
     }
+    private void startScheduler() {
+        scheduler = Executors.newScheduledThreadPool(1);
+        scheduler.scheduleAtFixedRate(this::broadcastParticlePositions, 0, 30, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::broadcastSpritePositions, 0, 30, TimeUnit.SECONDS);
+    }
+
     private void updateSpritePosition(String data, String clientId) {
-        // Example data format: "x:100,y:200"
-        System.out.println("DATA:" + data);
-        String[] parts = data.split(",");
-        int x = Integer.parseInt(parts[0].split(":")[1]);
-        int y = Integer.parseInt(parts[1].split(":")[1]);
-        
-        // Update or add sprite based on clientId
-        clientSprites.compute(clientId, (id, sprite) -> {
-            if (sprite == null) {
-                return new Sprite(x, y); // Create a new sprite if it doesn't exist
-            } else {
-                sprite.move(x - sprite.getX(), y - sprite.getY()); // Update existing sprite position
-                return sprite;
+
+        Pattern pattern = Pattern.compile("\\{\"clientId\":\"(.*?)\",\"spriteX\":(\\d+),\"spriteY\":(\\d+)\\}");
+        Matcher matcher = pattern.matcher(data);
+
+        if (matcher.find()) {
+            String extractedClientId = matcher.group(1);
+            int x = Integer.parseInt(matcher.group(2));
+            int y = Integer.parseInt(matcher.group(3));
+            clientSprites.compute(extractedClientId, (id, sprite) -> {
+                if (sprite == null) {
+                    return new Sprite(x, y);
+                } else {
+                    sprite.move(x - sprite.getX(), y - sprite.getY());
+                    return sprite;
+                }
+            });
+            broadcastParticlePositions();
+            broadcastSpritePositions();
+        } else {
+            Pattern disconnectPattern = Pattern.compile("\\{\"clientId\":\"(.*?)\",\"disconnect\":true\\}");
+            Matcher disconnectMatcher = disconnectPattern.matcher(data);
+            if (disconnectMatcher.find()) {
+
+                String extractedClientId = disconnectMatcher.group(1);
+                clientSprites.remove(extractedClientId);
+                System.out.println("Client disconnected: " + extractedClientId);
+                broadcastSpritePositions();
+                SwingUtilities.invokeLater(drawPanel::repaint);
             }
-        });
-        
-        // Optionally, broadcast updated positions to all clients here
-    }
-    private byte[] serializeParticlePositions() {
-        StringBuilder jsonBuilder = new StringBuilder();
-        jsonBuilder.append("[");
-        for (int i = 0; i < particles.size(); i++) {
-            Particle particle = particles.get(i);
-            // Include velocity and angle in the JSON string.
-            jsonBuilder.append(String.format(
-                "{\"x\":%.2f,\"y\":%.2f,\"velocity\":%.2f,\"angle\":%.2f}",
-                particle.x, particle.y, particle.velocity, Math.toDegrees(particle.angle) // Convert radian to degrees if needed
-            ));
-            if (i < particles.size() - 1) {
-                jsonBuilder.append(",");
+            else{
+                System.out.println("Received data does not match expected format.");
             }
+            
         }
-        jsonBuilder.append("]");
-        String jsonString = jsonBuilder.toString();
-        return jsonString.getBytes();
     }
+
+    
     
     
     public int getAndResetFrameCount() {
@@ -573,6 +668,10 @@ public class ParticleSimulator extends JFrame {
             for (Particle p : particles) {
                 p.draw(g);
             }
+            clientSprites.forEach((clientId, sprite) -> {
+                sprite.drawSquare(g, this); 
+            });
+    
             walls.parallelStream().forEach(w -> w.draw(g));
             g.drawString("FPS: " + fps, 10, 20);
             actualFramesDrawn.incrementAndGet();
