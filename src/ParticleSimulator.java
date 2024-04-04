@@ -154,7 +154,20 @@ public class ParticleSimulator extends JFrame {
             socket.send(packet);
         }
     }
-    
+    private void broadcastHeartbeat() {
+        try {
+            DatagramSocket socket = new DatagramSocket();
+            String message = "{\"heartbeat\":true}";
+            byte[] data = message.getBytes();
+            InetAddress group = InetAddress.getByName("230.0.0.1");
+            int port = 4449; 
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
+            socket.send(packet);
+            socket.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
     private void showWallInput(JPanel inputPanel){
         inputPanel.add(new JLabel(" Add new wall"));
         inputPanel.add(new JLabel());
@@ -513,6 +526,7 @@ public class ParticleSimulator extends JFrame {
         scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleAtFixedRate(this::broadcastParticlePositions, 0, 30, TimeUnit.SECONDS);
         scheduler.scheduleAtFixedRate(this::broadcastSpritePositions, 0, 30, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::broadcastHeartbeat, 0, 10, TimeUnit.SECONDS);
     }
 
     private void updateSpritePosition(String data, String clientId) {
