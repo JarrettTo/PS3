@@ -107,12 +107,12 @@ public class ExplorerSimulator extends JFrame {
         new Thread(() -> {
             while (true) {
                 long currentTime = System.currentTimeMillis();
-                if (currentTime - lastHeartbeatTime > 30000) { // 30 seconds without heartbeat
+                if (currentTime - lastHeartbeatTime > 30000) { 
                     JOptionPane.showMessageDialog(null, "Lost connection to the server. Closing.");
-                    System.exit(0); // Close the client
+                    System.exit(0); 
                 }
                 try {
-                    Thread.sleep(5000); // Check every 5 seconds
+                    Thread.sleep(5000); 
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -122,7 +122,7 @@ public class ExplorerSimulator extends JFrame {
     
     private void listenForHeartbeat() {
         Thread listenerThread = new Thread(() -> {
-            try (MulticastSocket socket = new MulticastSocket(4449)) { // Use the appropriate port
+            try (MulticastSocket socket = new MulticastSocket(4449)) { 
                 InetAddress group = InetAddress.getByName("230.0.0.1");
                 socket.joinGroup(group);
                 byte[] buffer = new byte[1024];
