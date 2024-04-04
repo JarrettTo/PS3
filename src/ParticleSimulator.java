@@ -145,9 +145,8 @@ public class ParticleSimulator extends JFrame {
     private void broadcastShutdownMessage() throws IOException {
         String shutdownMsg = "{\"shutdown\":true}";
         byte[] data = shutdownMsg.getBytes(StandardCharsets.UTF_8);
-        InetAddress group = InetAddress.getByName("230.0.0.1"); // Use the same multicast group as for particle updates
-        // Consider using a distinct port or ensure clients also listen for this shutdown message
-        int port = 4448; // Example port for shutdown messages
+        InetAddress group = InetAddress.getByName("230.0.0.1"); 
+        int port = 4448;
         
         try (DatagramSocket socket = new DatagramSocket()) {
             DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
