@@ -205,7 +205,7 @@ public class ParticleSimulator extends JFrame {
         });
     }
     private void showCombobox(JPanel inputPanel, Boolean show){
-        showWallInput(inputPanel);
+        //showWallInput(inputPanel);
         inputPanel.add(new JLabel(" Add:"));
         inputPanel.add(combobox);
         if(show == true){
