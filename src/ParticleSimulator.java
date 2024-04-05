@@ -4,7 +4,9 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -13,7 +15,10 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -51,6 +56,7 @@ public class ParticleSimulator extends JFrame {
     private int fps = 0;
     private long lastUpdateTime;
     private ConcurrentHashMap<String, Sprite> clientSprites = new ConcurrentHashMap<>();
+    private static final Set<Socket> clients = Collections.synchronizedSet(new HashSet<>());
     private final ForkJoinPool pool;
     public ParticleSimulator() {
         super("Particle Simulator");
@@ -132,7 +138,6 @@ public class ParticleSimulator extends JFrame {
         add(splitPane);
         controlPanel.add(inputPanel, BorderLayout.NORTH);
         startServer();
-        startUdpServer();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
                 broadcastShutdownMessage();
@@ -205,7 +210,7 @@ public class ParticleSimulator extends JFrame {
         });
     }
     private void showCombobox(JPanel inputPanel, Boolean show){
-        showWallInput(inputPanel);
+        //showWallInput(inputPanel);
         inputPanel.add(new JLabel(" Add:"));
         inputPanel.add(combobox);
         if(show == true){
@@ -255,6 +260,7 @@ public class ParticleSimulator extends JFrame {
                         }
                         particles.add(new Particle(startX, startY, angle, velocity));
                         broadcastParticlePositions();
+          
                         drawPanel.repaint();
                     } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                         JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
@@ -309,6 +315,7 @@ public class ParticleSimulator extends JFrame {
                             }
                             drawPanel.repaint();
                             broadcastParticlePositions();
+                            
                         } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                             JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
                         }
@@ -360,6 +367,7 @@ public class ParticleSimulator extends JFrame {
                             }
                             drawPanel.repaint();
                             broadcastParticlePositions();
+                            
                         } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                             JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
                         }
@@ -412,6 +420,7 @@ public class ParticleSimulator extends JFrame {
                             }
                             drawPanel.repaint();
                             broadcastParticlePositions();
+                            
                         } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                             JOptionPane.showMessageDialog(ParticleSimulator.this, "Invalid input format. Please use format: x,y", "Error", JOptionPane.ERROR_MESSAGE);
                         }
@@ -440,20 +449,36 @@ public class ParticleSimulator extends JFrame {
         return jsonString.getBytes();
     }
     
-    private void broadcastParticlePositions() {
-        System.out.println("BROADCAST!");
-        try {
-            DatagramSocket socket = new DatagramSocket();
-            byte[] data = serializeParticlePositions();
-            InetAddress group = InetAddress.getByName("230.0.0.1"); 
-            int port = 4446;
-            DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
-            socket.send(packet);
-            socket.close();
-        } catch (Exception e) {
-            e.printStackTrace();
+
+    public synchronized void broadcastParticlePositions() {
+        System.out.println("BROADCAST PARTICLES!");
+        byte[] data = serializeParticlePositions();
+        for (Socket client : clients) {
+            try {
+                client.getOutputStream().write(data);
+                client.getOutputStream().flush();
+            } catch (IOException e) {
+                System.err.println("Error broadcasting to client: " + client.getInetAddress());
+                e.printStackTrace();
+                clients.remove(client);
+            }
         }
     }
+    public synchronized void broadcastSpritePositions() {
+        System.out.println("BROADCAST!");
+        byte[] data = serializeSpritePositions();
+        for (Socket client : clients) {
+            try {
+                client.getOutputStream().write(data);
+                client.getOutputStream().flush();
+            } catch (IOException e) {
+                System.err.println("Error broadcasting to client: " + client.getInetAddress());
+                e.printStackTrace();
+                clients.remove(client);
+            }
+        }
+    }
+   
     public void stopScheduler() {
         if (scheduler != null) {
             scheduler.shutdown();
@@ -484,20 +509,44 @@ public class ParticleSimulator extends JFrame {
         jsonBuilder.append("]");
         return jsonBuilder.toString().getBytes();
     }
-    private void broadcastSpritePositions() {
-        try {
-            DatagramSocket socket = new DatagramSocket();
-            byte[] data = serializeSpritePositions();
-            InetAddress group = InetAddress.getByName("230.0.0.1"); 
-            int port = 4447; 
-            DatagramPacket packet = new DatagramPacket(data, data.length, group, port);
-            socket.send(packet);
-            socket.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    
+    public void startServer() {
+        new Thread(() -> {
+            try (ServerSocket serverSocket = new ServerSocket(4445)) {
+                System.out.println("Server started on port " + 4445);
+                while (true) {
+                    Socket clientSocket = serverSocket.accept();
+                    clients.add(clientSocket);
+                    System.out.println("Client connected: " + clientSocket.getInetAddress());
+                    broadcastParticlePositions();
+                    broadcastSpritePositions();
+                    clientHandlerPool.execute(() -> processClientMessages(clientSocket));
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }, "Server Thread").start();
     }
     
+    private void processClientMessages(Socket clientSocket) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))) {
+            String message;
+            while ((message = reader.readLine()) != null) {
+                System.out.println("MESSAGE:" + message);
+                updateSpritePosition(message);
+            }
+        } catch (IOException e) {
+            System.err.println("Error processing messages from client: " + clientSocket.getInetAddress());
+            e.printStackTrace();
+        } finally {
+            clients.remove(clientSocket);
+            try {
+                clientSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
     private void startUdpServer() {
         Thread udpServerThread = new Thread(() -> {
             try {
@@ -509,7 +558,7 @@ public class ParticleSimulator extends JFrame {
                     socket.receive(packet); 
                     
                     String received = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
-                    updateSpritePosition(received, packet.getAddress().toString() + ":" + packet.getPort());
+                    updateSpritePosition(received);
                     
                 }
             } catch (SocketException e) {
@@ -528,7 +577,7 @@ public class ParticleSimulator extends JFrame {
         scheduler.scheduleAtFixedRate(this::broadcastHeartbeat, 0, 10, TimeUnit.SECONDS);
     }
 
-    private void updateSpritePosition(String data, String clientId) {
+    private void updateSpritePosition(String data) {
 
         Pattern pattern = Pattern.compile("\\{\"clientId\":\"(.*?)\",\"spriteX\":(\\d+),\"spriteY\":(\\d+)\\}");
         Matcher matcher = pattern.matcher(data);
@@ -545,7 +594,7 @@ public class ParticleSimulator extends JFrame {
                     return sprite;
                 }
             });
-            broadcastParticlePositions();
+            
             broadcastSpritePositions();
         } else {
             Pattern disconnectPattern = Pattern.compile("\\{\"clientId\":\"(.*?)\",\"disconnect\":true\\}");
@@ -596,34 +645,14 @@ public class ParticleSimulator extends JFrame {
                         break;
                     }
                 }
+                
             }
         }, "Game Loop Thread").start();
     }
     
     
-    private void startServer() {
-        try {
-            serverSocket = new ServerSocket(port);
-            System.out.println("Server started on port " + port);
+    
 
-            Thread acceptThread = new Thread(() -> {
-                while (!serverSocket.isClosed()) {
-                    try {
-                        Socket clientSocket = serverSocket.accept();
-                        clientHandlerPool.submit(() -> handleClient(clientSocket));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            });
-            acceptThread.start();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-    private void handleClient(Socket clientSocket) {
-        // Handle client communication
-    }
     private void startSimulationThread() {
         Runnable simulationTask = () -> {
             while (!Thread.currentThread().isInterrupted()) {

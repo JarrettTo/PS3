@@ -9,10 +9,12 @@ import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -52,6 +54,8 @@ public class ExplorerSimulator extends JFrame {
     private long lastHeartbeatTime = System.currentTimeMillis();
     private Sprite sprite;
     private boolean explorer = false;
+    private Socket socket;
+    private OutputStream outputStream;
     public ExplorerSimulator() {
         super("Particle Simulator");
         pool = new ForkJoinPool();
@@ -66,7 +70,7 @@ public class ExplorerSimulator extends JFrame {
         setVisible(true);
         startSimulationThread();
         startGameLoop();
-
+        
         JPanel controlPanel = new JPanel();
         controlPanel.setLayout(new BorderLayout());
         JPanel inputPanel = new JPanel();
@@ -87,8 +91,7 @@ public class ExplorerSimulator extends JFrame {
         showModeCombobox(inputPanel);
         sprite = new Sprite(100, 100); 
         setupKeyListener();
-        startUdpClient();
-        sendSpritePosition(sprite.getX(), sprite.getY());
+        connectToServer();
         this.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -96,64 +99,81 @@ public class ExplorerSimulator extends JFrame {
                 System.exit(0);
             }
         });
-        listenForHeartbeat();
-        startHeartbeatChecker();
+  
     }
     private void showModeCombobox(JPanel inputPanel){
         inputPanel.add(new JLabel(" Mode:"));
 
     }
-    private void startHeartbeatChecker() {
+    public void connectToServer() {
         new Thread(() -> {
-            while (true) {
-                long currentTime = System.currentTimeMillis();
-                if (currentTime - lastHeartbeatTime > 30000) { 
-                    JOptionPane.showMessageDialog(null, "Lost connection to the server. Closing.");
-                    System.exit(0); 
-                }
-                try {
-                    Thread.sleep(5000); 
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
+            try {
+                // Assuming server IP and port are known and fixed
+                socket = new Socket("127.0.0.1", 4445);
+                outputStream = socket.getOutputStream();
+                System.out.println("Connected to server: " + socket.getInetAddress());
+                sendSpritePosition(sprite.getX(), sprite.getY());
+                // Start listening for messages from the server
+                listenForMessages();
+            } catch (IOException e) {
+                e.printStackTrace();
+                shutdownClient();
             }
-        }).start();
+        }, "Server Connection Thread").start();
     }
-    
-    private void listenForHeartbeat() {
-        Thread listenerThread = new Thread(() -> {
-            try (MulticastSocket socket = new MulticastSocket(4449)) { 
-                InetAddress group = InetAddress.getByName("230.0.0.1");
-                socket.joinGroup(group);
-                byte[] buffer = new byte[1024];
-                while (true) {
-                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    socket.receive(packet);
-                    String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
-                    if (message.contains("\"heartbeat\":true")) {
-                        lastHeartbeatTime = System.currentTimeMillis(); // Update last heartbeat time
-                    }
+    private void listenForMessages() {
+        new Thread(() -> {
+            try {
+                byte[] buffer = new byte[1000000]; // Large buffer for demo purposes
+                int bytesRead;
+                while ((bytesRead = socket.getInputStream().read(buffer)) != -1) {
+                    String received = new String(buffer, 0, bytesRead);
+                    System.out.println("Received: " + received);
+                    // Assume these methods are defined to update client state based on server messages
+                    updateParticlesFromJson(received);
+                    updateSpritesFromJson(received);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
+                shutdownClient();
             }
-        });
-        listenerThread.start();
+        }).start();
     }
-    private void sendDisconnectMessage() {
+    private void shutdownClient() {
         try {
-            DatagramSocket socket = new DatagramSocket();
-            InetAddress serverAddress = InetAddress.getByName("localhost");
-            int serverPort = 4445; 
-            
-            String message = String.format("{\"clientId\":\"%s\",\"disconnect\":true}", clientId);
-            byte[] buffer = message.getBytes();
-            
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, serverAddress, serverPort);
-            socket.send(packet);
-            socket.close();
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+            // Perform any other cleanup tasks here (e.g., closing streams, releasing resources)
+            System.exit(0); // Terminate the application
         } catch (IOException e) {
+            e.printStackTrace(); // Log any errors that occur during shutdown
+        }
+    }
+    public void sendSpritePosition(int x, int y) {
+        try {
+            System.out.println("WHYYY");
+            String message = String.format("{\"clientId\":\"%s\",\"spriteX\":%d,\"spriteY\":%d}\n", clientId, x, y);
+            outputStream.write(message.getBytes());
+            outputStream.flush(); // Ensure the message is sent immediately
+        } catch (IOException e) {
+            System.err.println("Failed to send sprite position to server.");
             e.printStackTrace();
+        }
+    }
+    public void sendDisconnectMessage() {
+        if (socket != null && !socket.isClosed()) {
+            try {
+                String message = String.format("{\"clientId\":\"%s\",\"disconnect\":true}\n", clientId);
+                socket.getOutputStream().write(message.getBytes());
+                socket.getOutputStream().flush(); // Ensure the message is sent immediately
+
+                // Optionally close the socket if no further communication is expected
+                socket.close();
+            } catch (IOException e) {
+                System.err.println("Failed to send disconnect message to server.");
+                e.printStackTrace();
+            }
         }
     }
     
@@ -189,67 +209,10 @@ public class ExplorerSimulator extends JFrame {
         }, "Game Loop Thread").start();
     }
 
-    private void startUdpClient() {
-        Thread udpClientThread = new Thread(() -> {
-            try (MulticastSocket socket = new MulticastSocket(4446)) {
-                InetAddress group = InetAddress.getByName("230.0.0.1");
-                socket.joinGroup(group);
-                
-                byte[] buffer = new byte[1048576];
-                while (true) {
-                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    socket.receive(packet);
-                    String receivedJson = new String(packet.getData(), 0, packet.getLength());
-                    updateParticlesFromJson(receivedJson);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-        udpClientThread.start();
-        Thread udpClientThreadForSprites = new Thread(() -> {
-            receiveMulticastData(4447, this::updateSpritesFromJson);
-        });
-        udpClientThreadForSprites.start();
-        listenForShutdownSignal();
-    }
-    private void listenForShutdownSignal() {
-        Thread listenerThread = new Thread(() -> {
-            try (MulticastSocket socket = new MulticastSocket(4448)) { 
-                InetAddress group = InetAddress.getByName("230.0.0.1");
-                socket.joinGroup(group);
-                byte[] buffer = new byte[1024];
-                while (true) {
-                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    socket.receive(packet);
-                    String message = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
-                    if (message.contains("\"shutdown\":true")) {
+    
+   
 
-                        System.exit(0);
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
-        listenerThread.start();
-    }
-
-    private void receiveMulticastData(int port, Consumer<String> dataHandler) {
-        try (MulticastSocket socket = new MulticastSocket(port)) {
-            InetAddress group = InetAddress.getByName("230.0.0.1");
-            socket.joinGroup(group);
-            byte[] buffer = new byte[1024];
-            while (true) {
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                socket.receive(packet);
-                String receivedJson = new String(packet.getData(), 0, packet.getLength());
-                dataHandler.accept(receivedJson);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+   
     private void updateSpritesFromJson(String json) {
         Set<String> receivedClientIds = new HashSet<>();
         Pattern pattern = Pattern.compile("\\{\"clientId\":\"(.*?)\",\"x\":(\\d+),\"y\":(\\d+)\\}");
@@ -283,6 +246,10 @@ public class ExplorerSimulator extends JFrame {
 
     private void updateParticlesFromJson(String json) {
         System.out.println("DATA" + json);
+        if (!json.trim().startsWith("[{\"x\":")) {
+            System.out.println("Unexpected JSON format. Exiting method.");
+            return; 
+        }
         Pattern pattern = Pattern.compile("\\{\"x\":(.*?),\"y\":(.*?),\"velocity\":(.*?),\"angle\":(.*?)\\}");
         Matcher matcher = pattern.matcher(json);
         ArrayList<Particle> updatedParticles = new ArrayList<>();
@@ -607,22 +574,7 @@ public class ExplorerSimulator extends JFrame {
             sendSpritePosition(sprite.getX(), sprite.getY());
         }
     }
-    private void sendSpritePosition(int x, int y) {
-        try {
-            DatagramSocket socket = new DatagramSocket();
-            InetAddress serverAddress = InetAddress.getByName("localhost");
-            int serverPort = 4445; 
-            
-            String message = String.format("{\"clientId\":\"%s\",\"spriteX\":%d,\"spriteY\":%d}", clientId, x, y);
-            byte[] buffer = message.getBytes();
-            
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, serverAddress, serverPort);
-            socket.send(packet);
-            socket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
+   
     
     private void setupKeyListener() {
         drawPanel.setFocusable(true);
